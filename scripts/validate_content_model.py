@@ -22,9 +22,19 @@
   职场效率,5000,120,350,85,42,"教程类为主"
 """
 
+import sys
+import io
+
+# 强制 UTF-8 输出，兼容 Windows PowerShell 等非 UTF-8 终端
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+elif hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 import os
 import csv
-import sys
 import json
 import math
 from dataclasses import dataclass, field, asdict

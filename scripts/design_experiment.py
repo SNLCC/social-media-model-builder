@@ -15,10 +15,20 @@
   - 测试计划时间线
 """
 
+import sys
+import io
+
+# 强制 UTF-8 输出，兼容 Windows PowerShell 等非 UTF-8 终端
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+elif hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 import csv
 import json
 import os
-import sys
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 from datetime import datetime, timedelta

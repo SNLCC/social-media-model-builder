@@ -16,10 +16,20 @@
   2024-01-05,标题2,3000,200,120,30,8,"清单体"
 """
 
+import sys
+import io
+
+# 强制 UTF-8 输出，兼容 Windows PowerShell 等非 UTF-8 终端
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+elif hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 import csv
 import json
 import os
-import sys
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -77,8 +87,11 @@ class AnalysisResult:
 
 # ─── 指标计算 ───────────────────────────────────────────────────────────────
 
-def compute_metrics(post: Post) -> PostMetrics:
-    """计算单篇帖子的互动指标"""
+def compute_metrics(post: Post, now: Optional[datetime] = None) -> PostMetrics:
+    """计算单篇帖子的互动指标，含新鲜度权重"""
+    if now is None:
+        now = datetime.now()
+    
     imp = max(post.impressions, 1)
     
     # 综合互动得分（收藏权重最高，因为小红书看重"有用性"）
@@ -99,9 +112,10 @@ def compute_metrics(post: Post) -> PostMetrics:
 
 # ─── 信号灯检查 ─────────────────────────────────────────────────────────────
 
-def check_signals(metrics_list: List[PostMetrics]) -> List[SignalStatus]:
-    """根据信号灯规则检查状态"""
+def check_signals(metrics_list: List[PostMetrics], posts_raw: List[Post]) -> List[SignalStatus]:
+    """根据信号灯规则检查状态，含时间维度的分析"""
     signals = []
+    now = datetime.now()
     
     if len(metrics_list) < 3:
         signals.append(SignalStatus(
@@ -112,6 +126,60 @@ def check_signals(metrics_list: List[PostMetrics]) -> List[SignalStatus]:
             posts_involved=len(metrics_list),
         ))
         return signals
+    
+    # ── 时间维度分析 ──
+    
+    # 1. 发帖时间新鲜度：帖子是否太久没更新了？
+    if posts_raw:
+        dates = [datetime.strptime(p.date, "%Y-%m-%d") for p in posts_raw if p.date]
+        if dates:
+            last_post_date = max(dates)
+            days_since_last = (now - last_post_date).days
+            if days_since_last > 14:
+                signals.append(SignalStatus(
+                    signal_type="yellow",
+                    metric="长时间未更新",
+                    triggered=True,
+                    detail=f"最近一篇帖子发布于 {days_since_last} 天前（{last_post_date.date()}），超过 14 天未更新将影响账号活跃度权重",
+                    posts_involved=1,
+                ))
+            elif days_since_last > 30:
+                signals.append(SignalStatus(
+                    signal_type="red",
+                    metric="长期断更",
+                    triggered=True,
+                    detail=f"最近一篇帖子发布于 {days_since_last} 天前（{last_post_date.date()}），断更超过 30 天严重损害账号权重",
+                    posts_involved=1,
+                ))
+            
+            # 2. 发帖频率分析（计算相邻帖子之间的时间间隔）
+            sorted_dates = sorted(dates)
+            if len(sorted_dates) >= 3:
+                gaps = [(sorted_dates[i+1] - sorted_dates[i]).days for i in range(len(sorted_dates)-1)]
+                avg_gap = sum(gaps) / len(gaps)
+                max_gap = max(gaps)
+                
+                if avg_gap <= 1:
+                    freq_status = "高频（每天多篇）"
+                elif avg_gap <= 3:
+                    freq_status = "中高频（每 1-3 天一篇）"
+                elif avg_gap <= 7:
+                    freq_status = "中频（每周 1-2 篇）"
+                elif avg_gap <= 14:
+                    freq_status = "低频（每 1-2 周一篇）"
+                else:
+                    freq_status = "极低频（超过 2 周一更）"
+                
+                if max_gap > avg_gap * 3 and max_gap > 14:
+                    signals.append(SignalStatus(
+                        signal_type="yellow",
+                        metric="发帖节奏不稳定",
+                        triggered=True,
+                        detail=f"平均每 {avg_gap:.0f} 天发一篇（{freq_status}），但最长间隔达 {max_gap} 天，存在断更风险",
+                        posts_involved=len(gaps),
+                    ))
+    
+    # ── 互动趋势分析 ──
     
     # 用最后5篇（不够则全部）
     recent = metrics_list[-5:] if len(metrics_list) >= 5 else metrics_list
@@ -312,7 +380,8 @@ def print_analysis(posts_raw: List[Post], output_dir: str = "."):
         print("没有数据")
         return
     
-    metrics_list = [compute_metrics(p) for p in posts_raw]
+    now = datetime.now()
+    metrics_list = [compute_metrics(p, now) for p in posts_raw]
     
     print("\n" + "=" * 60)
     print("  帖子信号分析报告")
@@ -331,7 +400,7 @@ def print_analysis(posts_raw: List[Post], output_dir: str = "."):
     print(f"\n[趋势] 整体趋势: {trend}")
     
     # 信号检查
-    signals = check_signals(metrics_list)
+    signals = check_signals(metrics_list, posts_raw)
     status = determine_overall_status(signals)
     
     print(f"\n[信号] 信号灯状态")
