@@ -1,0 +1,4 @@
+interface:
+  display_name: "自媒体内容模型构建器"
+  short_description: "基于第一性原理构建可复刻的自媒体内容模型和运营方法论"
+  default_prompt: "Use $social-media-model-builder to analyze your platform and build a replicable content model from first principles."
