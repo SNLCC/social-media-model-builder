@@ -18,13 +18,25 @@
 import sys
 import io
 
-# 强制 UTF-8 输出，兼容 Windows PowerShell 等非 UTF-8 终端
+# 强制 UTF-8 输出，兼容 Windows PowerShell（包括管道场景）
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        # 设置控制台代码页为 UTF-8
+        kernel32.SetConsoleOutputCP(65001)
+        kernel32.SetConsoleCP(65001)
+    except Exception:
+        pass
+
 if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 elif hasattr(sys.stdout, 'buffer'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stdin, 'reconfigure'):
+    sys.stdin.reconfigure(encoding='utf-8', errors='replace')
 
 import csv
 import json
