@@ -595,6 +595,11 @@ def main():
     print_report(observations, benchmarks, results)
     
     # 5. JSON 输出
+    report = {
+        "observations_count": len(observations),
+        "benchmarks": benchmarks,
+        "results": [asdict(r) for r in results],
+    }
     output_path = os.path.join(output_dir, ".validate_report.json")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
